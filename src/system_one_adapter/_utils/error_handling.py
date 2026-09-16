@@ -1,9 +1,9 @@
 """Retry handling and reusable provider-error mapping.
 
 The retry loop is a thin wrapper over the SDK's own tenacity policy: providers translate
-their SDK exceptions to :class:`~typesafe_sdk.TypeSafeError` at the boundary, and the
+their SDK exceptions to `typesafe_sdk.TypeSafeError` at the boundary, and the
 policy's predicate decides which of those to retry. Each provider module owns which of
-its SDK exceptions map where; :func:`map_provider_error` gives them the shared
+its SDK exceptions map where; `map_provider_error` gives them the shared
 status/timeout/connection mapping so only the exception classes differ.
 """
 
@@ -31,8 +31,9 @@ ResultT = TypeVar("ResultT")
 class RetryReasons:
     """Reason for performing one retry.
 
-    :param category: Retry mechanism that requested another attempt.
-    :param msg: Detailed retry cause.
+    Attributes:
+        category: Retry mechanism that requested another attempt.
+        msg: Detailed retry cause.
     """
 
     category: Literal["provider_error", "malformed_structure"]
@@ -48,13 +49,16 @@ def map_provider_error(
 ) -> TypeSafeError:
     """Map a provider SDK exception to an SDK error, preserving HTTP status and body.
 
-    :param error: Exception raised by a provider SDK.
-    :param status_errors: Provider HTTP-status error classes (carry ``status_code``,
-        ``body``, and ``response``).
-    :param timeout_errors: Provider timeout classes; matched first as they usually
-        subclass the connection classes.
-    :param connection_errors: Provider transport/connection error classes.
-    :return: The mapped SDK error.
+    Args:
+        error: Exception raised by a provider SDK.
+        status_errors: Provider HTTP-status error classes carrying `status_code`,
+            `body`, and `response`.
+        timeout_errors: Provider timeout classes. Matched first because they
+            usually subclass the connection error classes.
+        connection_errors: Provider transport or connection error classes.
+
+    Returns:
+        The mapped SDK error, or the original error if it is already a TypeSafe error.
     """
     if isinstance(error, TypeSafeError):
         return error

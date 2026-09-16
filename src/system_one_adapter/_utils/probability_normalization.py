@@ -26,8 +26,12 @@ def probability_debug_data(
 ) -> dict[str, Any]:
     """Build probability diagnostics from question normalization results.
 
-    :param probability_normalizations: Results keyed by question identifier.
-    :return: Probability-related debug fields.
+    Args:
+        probability_normalizations: Results keyed by question identifier.
+
+    Returns:
+        Probability-related debug fields, including original distributions when
+        normalization changed them.
     """
     errors = {
         question_id: probability_normalization.error
@@ -56,8 +60,11 @@ def rescale_probabilities(probabilities: dict[str, float]) -> dict[str, float]:
     Used wherever a value only has meaning over a true distribution (such as a score
     expected value), independent of whether the reported probabilities are normalized.
 
-    :param probabilities: Probabilities keyed by answer.
-    :return: Probabilities summing to 1.
+    Args:
+        probabilities: A nonempty probability mapping keyed by answer.
+
+    Returns:
+        Probabilities summing to one.
     """
     total = sum(probabilities.values())
     if total == 0:
@@ -75,11 +82,15 @@ def normalize_probabilities_of_all_answers(
 ) -> ProbabilityNormalization:
     """Build and optionally normalize a probability distribution.
 
-    :param answers: Ordered possible answers.
-    :param value: LLM answer value.
-    :param answer_mode: Probability or discrete LLM answer mode.
-    :param enabled: Whether to normalize invalid distributions.
-    :return: Normalization result.
+    Args:
+        answers: Ordered possible answers.
+        value: LLM answer value: a selected answer or per-answer probabilities.
+        answer_mode: Probability or discrete LLM answer mode.
+        enabled: Whether to normalize invalid distributions.
+
+    Returns:
+        The resulting probabilities, their original sum error, and the original
+        distribution when normalization changed it.
     """
     if answer_mode == "discrete":
         selected = str(value)

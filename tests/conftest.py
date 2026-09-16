@@ -89,8 +89,11 @@ def pytest_recording_configure(config: Any, vcr: Any) -> None:
 def scrub_response(response: dict[str, Any]) -> dict[str, Any]:
     """Drop every response header outside the allowlist.
 
-    :param response: Recorded response dictionary.
-    :return: The response with its headers reduced.
+    Args:
+        response: Recorded response dictionary, modified in place.
+
+    Returns:
+        The response with its headers reduced to the allowlist.
     """
     headers = response.get("headers") or {}
     response["headers"] = {name: value for name, value in headers.items() if name.lower() in ALLOWED_RESPONSE_HEADERS}
@@ -101,11 +104,12 @@ def scrub_response(response: dict[str, Any]) -> dict[str, Any]:
 def vcr_config() -> dict[str, Any]:
     """Configure cassette recording and replay.
 
-    Matching includes ``body`` because every provider call in a cassette posts to the
+    Matching includes `body` because every provider call in a cassette posts to the
     same endpoint. On the default matchers each request would replay whichever
     interaction was recorded first, silently returning another test's response.
 
-    :return: VCR configuration passed to ``VCR.use_cassettes``.
+    Returns:
+        VCR configuration passed to `VCR.use_cassettes`.
     """
     return {
         # The registered JSON serializer keeps HTTP bodies as nested objects, so the

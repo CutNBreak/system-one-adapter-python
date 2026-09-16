@@ -1,19 +1,20 @@
 """Provider compatibility tests replayed from recorded HTTP cassettes.
 
-VCR (``vcrpy`` through ``pytest-recording``, configured in ``conftest.py``) intercepts
+VCR (`vcrpy` through `pytest-recording`, configured in `conftest.py`) intercepts
 these tests at the HTTP layer: the first run records each provider exchange to a
 cassette, and every run after that replays it in place of the real call, so the request
 this client builds and the response it parses are both exercised for real.
 
-Cassettes live in ``tests/cassettes`` and are replayed by default, so the whole client
+Cassettes live in `tests/cassettes` and are replayed by default, so the whole client
 stack runs against recorded provider traffic without credentials or network access.
-Anthropic request-building is covered by ``test_provider_requests.py`` instead, so no
-Anthropic key is needed. Re-record after changing prompts, schemas, or providers::
+Re-record after changing prompts, schemas, or providers:
 
-    uv run pytest tests/test_client_with_live_apis.py --record-mode=rewrite
+```shell
+uv run pytest tests/test_client_with_live_apis.py --record-mode=rewrite
+```
 
-Recording makes real, billable API calls and needs ``OPENAI_API_KEY`` and
-``TYPESAFE_API_KEY``.
+Recording makes real, billable API calls and needs `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, and `TYPESAFE_API_KEY`.
 """
 
 import asyncio
@@ -99,8 +100,9 @@ def _response_data(response: Any) -> dict[str, Any]:
 def assert_live_response_matches_reference(response: Any, request: pytest.FixtureRequest) -> None:
     """Validate expected answers and stable, reproducible response data.
 
-    :param response: Live or cassette-replayed TypeSafe response.
-    :param request: Pytest request identifying the matching expected response.
+    Args:
+        response: Live or cassette-replayed TypeSafe response.
+        request: Pytest request identifying the matching expected response.
     """
     response_data = _response_data(response)
     expected_answer_probabilities = {

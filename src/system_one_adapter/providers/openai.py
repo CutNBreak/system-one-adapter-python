@@ -1,10 +1,4 @@
-"""OpenAI Responses and OpenAI-compatible Chat Completions providers.
-
-``base_url`` and ``api_key`` target any OpenAI-compatible vendor (xAI, Groq, Together,
-DeepSeek, Mistral, a local server, ...); both default to the OpenAI SDK's own resolution
-when omitted. OpenAI's endpoint defaults to Responses; other endpoints default to
-Chat Completions. ``api`` explicitly selects either transport, including for proxies.
-"""
+"""OpenAI Responses and OpenAI-compatible Chat Completions providers."""
 
 from __future__ import annotations
 
@@ -99,12 +93,29 @@ class OpenAIProvider(_OpenAIErrors):
         api_key: str | None = None,
         api: Literal["responses", "chat_completions"] | None = None,
     ) -> None:
-        """Build the provider for ``model_name`` on the given endpoint."""
+        """Initialize the model, endpoint, and synchronous SDK client.
+
+        Args:
+            model_name: Model to request from the selected endpoint.
+            base_url: OpenAI-compatible endpoint URL. Defaults to the SDK's own
+                resolution, including `OPENAI_BASE_URL`.
+            api_key: Endpoint credential. Defaults to the SDK's own resolution,
+                including `OPENAI_API_KEY`.
+            api: `"responses"` or `"chat_completions"`. Defaults to Responses
+                for `api.openai.com` and Chat Completions for other hosts.
+
+        Raises:
+            ValueError: The API selector is unsupported.
+        """
         if api not in (None, "responses", "chat_completions"):
             raise ValueError("api must be 'responses' or 'chat_completions'")
         self.model_name = model_name
         self._client = openai.OpenAI(base_url=base_url, api_key=api_key, max_retries=0)
         self.api = api if api is not None else ("responses" if self._client.base_url.host == "api.openai.com" else "chat_completions")
+
+    def close(self) -> None:
+        """Release the SDK client's connection pool."""
+        self._client.close()
 
     def request(
         self,
@@ -113,7 +124,20 @@ class OpenAIProvider(_OpenAIErrors):
         schema: dict[str, Any],
         structured: bool,
     ) -> ProviderResult:
-        """Perform one request and return its raw payload and usage."""
+        """Perform one request and return its raw payload and usage.
+
+        Args:
+            messages: Conversation in provider-neutral form.
+            schema: JSON schema for the model's answer.
+            structured: Whether to use native structured output.
+
+        Returns:
+            The response text and input and output token counts.
+
+        Raises:
+            TypeSafeError: The SDK request fails or a Responses request does not
+                complete successfully.
+        """
         with translating(self.translate_error):
             if self.api == "responses":
                 kwargs = _responses_request_kwargs(self.model_name, messages, schema, structured=structured)
@@ -142,12 +166,29 @@ class AsyncOpenAIProvider(_OpenAIErrors):
         api_key: str | None = None,
         api: Literal["responses", "chat_completions"] | None = None,
     ) -> None:
-        """Build the provider for ``model_name`` on the given endpoint."""
+        """Initialize the model, endpoint, and asynchronous SDK client.
+
+        Args:
+            model_name: Model to request from the selected endpoint.
+            base_url: OpenAI-compatible endpoint URL. Defaults to the SDK's own
+                resolution, including `OPENAI_BASE_URL`.
+            api_key: Endpoint credential. Defaults to the SDK's own resolution,
+                including `OPENAI_API_KEY`.
+            api: `"responses"` or `"chat_completions"`. Defaults to Responses
+                for `api.openai.com` and Chat Completions for other hosts.
+
+        Raises:
+            ValueError: The API selector is unsupported.
+        """
         if api not in (None, "responses", "chat_completions"):
             raise ValueError("api must be 'responses' or 'chat_completions'")
         self.model_name = model_name
         self._client = openai.AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=0)
         self.api = api if api is not None else ("responses" if self._client.base_url.host == "api.openai.com" else "chat_completions")
+
+    async def aclose(self) -> None:
+        """Release the SDK client's connection pool."""
+        await self._client.close()
 
     async def request(
         self,
@@ -156,7 +197,20 @@ class AsyncOpenAIProvider(_OpenAIErrors):
         schema: dict[str, Any],
         structured: bool,
     ) -> ProviderResult:
-        """Perform one request and return its raw payload and usage."""
+        """Perform one request and return its raw payload and usage.
+
+        Args:
+            messages: Conversation in provider-neutral form.
+            schema: JSON schema for the model's answer.
+            structured: Whether to use native structured output.
+
+        Returns:
+            The response text and input and output token counts.
+
+        Raises:
+            TypeSafeError: The SDK request fails or a Responses request does not
+                complete successfully.
+        """
         with translating(self.translate_error):
             if self.api == "responses":
                 kwargs = _responses_request_kwargs(self.model_name, messages, schema, structured=structured)

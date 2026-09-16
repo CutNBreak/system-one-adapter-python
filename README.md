@@ -47,6 +47,10 @@ from system_one_adapter.providers.openai import OpenAIProvider
 client.system_one(state, questions, model=OpenAIProvider("grok-4", base_url="https://api.x.ai/v1"))
 ```
 
+Use clients as context managers (`with` / `async with`), or call `close()` /
+`await aclose()` after all evaluations finish. The adapter closes providers it
+creates; provider instances passed as `model` remain caller-owned.
+
 OpenAI's endpoint uses the Responses API, with strict JSON Schema for structured
 output and JSON mode for prompted output. Custom endpoints (including
 `OPENAI_BASE_URL`) default to Chat Completions. Pass `api="responses"` or

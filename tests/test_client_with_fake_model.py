@@ -36,14 +36,17 @@ def _provider_error(status: int) -> TypeSafeAPIError:
 
 
 class _ScriptedProvider:
-    """Provider returning a scripted sequence of payloads and errors.
-
-    Each script step is a ``dict`` answer payload to encode, raw response text, or an
-    ``Exception`` to raise. The last payload repeats once the script is exhausted so a
-    corrective retry always has a response to return.
-    """
+    """Provider returning a scripted sequence of payloads and errors."""
 
     def __init__(self, *steps: object, usage: tuple[int, int] = (11, 7)) -> None:
+        """Initialize the response script and token usage.
+
+        Args:
+            *steps: Answer dictionaries to encode, raw response strings, or
+                exceptions to raise. The final step repeats once the script is
+                exhausted, so corrective retries always have a response.
+            usage: Input and output token counts returned by each successful call.
+        """
         self.model_name = "fake-model"
         self._steps = list(steps)
         self._usage = usage
@@ -400,9 +403,8 @@ def test_malformed_structure_is_retried(
     assert category == "malformed_structure"
 
 
-def test_missing_provider_setting_is_rejected() -> None:
+@pytest.mark.parametrize("client_class", [SystemOneAdapterClient, AsyncSystemOneAdapterClient])
+def test_missing_provider_setting_is_rejected(client_class: type[SystemOneAdapterClient] | type[AsyncSystemOneAdapterClient]) -> None:
+    client = client_class(structured_outputs=True, llm_answer_mode="probabilities")
     with pytest.raises(ValueError, match="provider"):
-        SystemOneAdapterClient(
-            structured_outputs=True,
-            llm_answer_mode="probabilities",
-        ).system_one("state", {"answer": QUESTIONS["positive"]}, model="gpt-4o-mini")
+        _run(client, "gpt-4o-mini", {"answer": QUESTIONS["positive"]}, "state")

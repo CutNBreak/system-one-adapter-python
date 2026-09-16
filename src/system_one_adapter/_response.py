@@ -1,8 +1,8 @@
 """SDK response types extended with LLM accounting and diagnostics.
 
 Both structs subclass the msgspec SDK types, so a caller serializes them the same way
-as any SDK response: ``msgspec.to_builtins(response)`` or ``msgspec.json.encode``. The
-``debug`` field holds plain JSON-compatible builtins, so no custom serialization is
+as any SDK response: `msgspec.to_builtins(response)` or `msgspec.json.encode`. The
+`debug` field holds plain JSON-compatible builtins, so no custom serialization is
 needed.
 """
 

@@ -1,8 +1,8 @@
 """Provider seam: OpenAI-compatible and native Anthropic model requests.
 
-The concrete providers live in :mod:`system_one_adapter.providers.openai` and
-:mod:`system_one_adapter.providers.anthropic` and each needs its own optional dependency
-(the ``openai`` / ``anthropic`` extras). They are imported lazily, only when selected,
+The concrete providers live in `system_one_adapter.providers.openai` and
+`system_one_adapter.providers.anthropic` and each needs its own optional dependency
+(the `openai` / `anthropic` extras). They are imported lazily, only when selected,
 so importing this package needs neither SDK installed.
 """
 
@@ -43,11 +43,18 @@ def build_sync_provider(
 ) -> SyncProvider:
     """Build the selected synchronous provider, or use an injected provider.
 
-    :param provider: ``"openai"`` or ``"anthropic"``, or ``None`` when ``model`` is
-        already a provider instance.
-    :param model: Model name for the selected provider, or a ready ``SyncProvider``
-        (a custom OpenAI-compatible endpoint or a test double), used unchanged.
-    :return: A synchronous provider.
+    Args:
+        provider: `"openai"` or `"anthropic"`, or `None` when `model` is
+            already a provider instance.
+        model: Model name for the selected provider, or a ready `SyncProvider`
+            such as a custom OpenAI-compatible endpoint or test double.
+
+    Returns:
+        A new synchronous provider, or the supplied instance unchanged.
+
+    Raises:
+        ValueError: A model name has no provider selector, or the selected
+            provider's optional dependency is missing.
     """
     if not isinstance(model, str):
         return model
@@ -72,11 +79,18 @@ def build_async_provider(
 ) -> AsyncProvider:
     """Build the selected asynchronous provider, or use an injected provider.
 
-    :param provider: ``"openai"`` or ``"anthropic"``, or ``None`` when ``model`` is
-        already a provider instance.
-    :param model: Model name for the selected provider, or a ready ``AsyncProvider``
-        (a custom OpenAI-compatible endpoint or a test double), used unchanged.
-    :return: An asynchronous provider.
+    Args:
+        provider: `"openai"` or `"anthropic"`, or `None` when `model` is
+            already a provider instance.
+        model: Model name for the selected provider, or a ready `AsyncProvider`
+            such as a custom OpenAI-compatible endpoint or test double.
+
+    Returns:
+        A new asynchronous provider, or the supplied instance unchanged.
+
+    Raises:
+        ValueError: A model name has no provider selector, or the selected
+            provider's optional dependency is missing.
     """
     if not isinstance(model, str):
         return model

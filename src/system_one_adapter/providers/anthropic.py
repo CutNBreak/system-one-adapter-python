@@ -1,6 +1,6 @@
 """Native Anthropic Messages API providers.
 
-Native mode uses ``output_config.format``, Claude's schema-constrained output, which is
+Native mode uses `output_config.format`, Claude's schema-constrained output, which is
 only available on this native API and not through an OpenAI-compatible endpoint.
 """
 
@@ -71,12 +71,24 @@ class AnthropicProvider(_AnthropicErrors):
     """Synchronously call the Anthropic Messages API."""
 
     def __init__(self, model_name: str, *, max_tokens: int = _DEFAULT_MAX_TOKENS) -> None:
-        """Build the provider with a configurable output token limit."""
+        """Initialize the model, output limit, and synchronous SDK client.
+
+        Args:
+            model_name: Anthropic model to request.
+            max_tokens: Maximum output tokens per request. Defaults to 4,096.
+
+        Raises:
+            ValueError: The output token limit is not positive.
+        """
         if max_tokens <= 0:
             raise ValueError("max_tokens must be > 0")
         self.model_name = model_name
         self.max_tokens = max_tokens
         self._client = anthropic.Anthropic(max_retries=0)
+
+    def close(self) -> None:
+        """Release the SDK client's connection pool."""
+        self._client.close()
 
     def request(
         self,
@@ -85,7 +97,20 @@ class AnthropicProvider(_AnthropicErrors):
         schema: dict[str, Any],
         structured: bool,
     ) -> ProviderResult:
-        """Perform one Messages request and return its raw payload and usage."""
+        """Perform one Messages request and return its raw payload and usage.
+
+        Args:
+            messages: Conversation in provider-neutral form.
+            schema: JSON schema for the model's answer.
+            structured: Whether to use native structured output.
+
+        Returns:
+            The response text and input and output token counts.
+
+        Raises:
+            TypeSafeError: The SDK request fails or the response reaches the
+                output token limit.
+        """
         with translating(self.translate_error):
             kwargs = _request_kwargs(self.model_name, messages, schema, structured=structured, max_tokens=self.max_tokens)
             record_request(kwargs, api="messages")
@@ -97,12 +122,24 @@ class AsyncAnthropicProvider(_AnthropicErrors):
     """Asynchronously call the Anthropic Messages API."""
 
     def __init__(self, model_name: str, *, max_tokens: int = _DEFAULT_MAX_TOKENS) -> None:
-        """Build the provider with a configurable output token limit."""
+        """Initialize the model, output limit, and asynchronous SDK client.
+
+        Args:
+            model_name: Anthropic model to request.
+            max_tokens: Maximum output tokens per request. Defaults to 4,096.
+
+        Raises:
+            ValueError: The output token limit is not positive.
+        """
         if max_tokens <= 0:
             raise ValueError("max_tokens must be > 0")
         self.model_name = model_name
         self.max_tokens = max_tokens
         self._client = anthropic.AsyncAnthropic(max_retries=0)
+
+    async def aclose(self) -> None:
+        """Release the SDK client's connection pool."""
+        await self._client.close()
 
     async def request(
         self,
@@ -111,7 +148,20 @@ class AsyncAnthropicProvider(_AnthropicErrors):
         schema: dict[str, Any],
         structured: bool,
     ) -> ProviderResult:
-        """Perform one Messages request and return its raw payload and usage."""
+        """Perform one Messages request and return its raw payload and usage.
+
+        Args:
+            messages: Conversation in provider-neutral form.
+            schema: JSON schema for the model's answer.
+            structured: Whether to use native structured output.
+
+        Returns:
+            The response text and input and output token counts.
+
+        Raises:
+            TypeSafeError: The SDK request fails or the response reaches the
+                output token limit.
+        """
         with translating(self.translate_error):
             kwargs = _request_kwargs(self.model_name, messages, schema, structured=structured, max_tokens=self.max_tokens)
             record_request(kwargs, api="messages")
