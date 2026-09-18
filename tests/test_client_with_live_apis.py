@@ -23,7 +23,6 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-import msgspec
 import pytest
 from typesafe_sdk import (
     Choice,
@@ -94,7 +93,7 @@ ANSWER_MODE_PARAMETERS = ["probabilities", "discrete"]
 
 def _response_data(response: Any) -> dict[str, Any]:
     """Serialize a response the same way for the extended and plain SDK types."""
-    return msgspec.to_builtins(response, str_keys=True)
+    return response.model_dump(mode="json")
 
 
 def assert_live_response_matches_reference(response: Any, request: pytest.FixtureRequest) -> None:

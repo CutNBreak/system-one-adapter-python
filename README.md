@@ -102,13 +102,11 @@ result = provider.request(
 )
 ```
 
-It is a `msgspec.Struct` like every SDK response, so serialize it the same way (there is
-no `model_dump`):
+It is a Pydantic model like every SDK response in `typesafe-sdk>=0.7.0`, so use
+`model_dump()` for a dictionary or `model_dump_json()` for JSON:
 
 ```python
-import msgspec
-
-print(msgspec.json.encode(response).decode())
+print(response.model_dump_json())
 ```
 
 ### Async

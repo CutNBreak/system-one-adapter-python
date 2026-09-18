@@ -18,7 +18,36 @@
                         "format": {
                             "type": "json_schema",
                             "schema": {
-                                "type": "object",
+                                "$defs": {
+                                    "TypeSafeAnswers": {
+                                        "additionalProperties": false,
+                                        "description": "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
+                                        "properties": {
+                                            "instruction_probe": {
+                                                "description": "Return the only marker whose state is ACTIVE.\nChoice labels, answer with one label:\nmarker_fen = The marker_fen catalog entry.\nmarker_tor = The marker_tor catalog entry.",
+                                                "enum": [
+                                                    "marker_fen",
+                                                    "marker_tor"
+                                                ],
+                                                "type": "string"
+                                            },
+                                            "criteria_probe": {
+                                                "description": "Return the correct opaque handling route for the parcel.\nChoice labels, answer with one label:\nroute_7q = Use when the handling class is CLASS_CRYSTAL.\nroute_2m = Use when the handling class is CLASS_STEEL.",
+                                                "enum": [
+                                                    "route_7q",
+                                                    "route_2m"
+                                                ],
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "instruction_probe",
+                                            "criteria_probe"
+                                        ],
+                                        "type": "object"
+                                    }
+                                },
+                                "additionalProperties": false,
                                 "properties": {
                                     "answers": {
                                         "$ref": "#/$defs/TypeSafeAnswers"
@@ -27,34 +56,7 @@
                                 "required": [
                                     "answers"
                                 ],
-                                "additionalProperties": false,
-                                "$defs": {
-                                    "TypeSafeAnswers": {
-                                        "description": "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
-                                        "type": "object",
-                                        "properties": {
-                                            "instruction_probe": {
-                                                "description": "Return the only marker whose state is ACTIVE.\nChoice labels, answer with one label:\nmarker_fen = The marker_fen catalog entry.\nmarker_tor = The marker_tor catalog entry.",
-                                                "enum": [
-                                                    "marker_fen",
-                                                    "marker_tor"
-                                                ]
-                                            },
-                                            "criteria_probe": {
-                                                "description": "Return the correct opaque handling route for the parcel.\nChoice labels, answer with one label:\nroute_7q = Use when the handling class is CLASS_CRYSTAL.\nroute_2m = Use when the handling class is CLASS_STEEL.",
-                                                "enum": [
-                                                    "route_2m",
-                                                    "route_7q"
-                                                ]
-                                            }
-                                        },
-                                        "required": [
-                                            "instruction_probe",
-                                            "criteria_probe"
-                                        ],
-                                        "additionalProperties": false
-                                    }
-                                }
+                                "type": "object"
                             }
                         }
                     },
@@ -113,7 +115,7 @@
                         "600"
                     ],
                     "content-length": [
-                        "1602"
+                        "1634"
                     ]
                 }
             },
@@ -130,13 +132,13 @@
                 "body": {
                     "string": {
                         "model": "claude-haiku-4-5-20251001",
-                        "id": "msg_011Cf5gioVZ82nwtg9VA4FPp",
+                        "id": "msg_011CfAkWrdi91dmxrZAVxdus",
                         "type": "message",
                         "role": "assistant",
                         "content": [
                             {
                                 "type": "text",
-                                "text": "{\"answers\": {\"instruction_probe\": \"marker_tor\", \"criteria_probe\": \"route_7q\"}}"
+                                "text": "{\"answers\":{\"instruction_probe\":\"marker_tor\",\"criteria_probe\":\"route_7q\"}}"
                             }
                         ],
                         "container": null,
@@ -144,14 +146,14 @@
                         "stop_sequence": null,
                         "stop_details": null,
                         "usage": {
-                            "input_tokens": 571,
+                            "input_tokens": 588,
                             "cache_creation_input_tokens": 0,
                             "cache_read_input_tokens": 0,
                             "cache_creation": {
                                 "ephemeral_5m_input_tokens": 0,
                                 "ephemeral_1h_input_tokens": 0
                             },
-                            "output_tokens": 28,
+                            "output_tokens": 25,
                             "service_tier": "standard",
                             "inference_geo": "not_available"
                         }

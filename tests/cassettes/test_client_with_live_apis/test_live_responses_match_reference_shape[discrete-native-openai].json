@@ -20,20 +20,10 @@
                             "type": "json_schema",
                             "name": "evaluation",
                             "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "answers": {
-                                        "$ref": "#/$defs/TypeSafeAnswers"
-                                    }
-                                },
-                                "required": [
-                                    "answers"
-                                ],
-                                "additionalProperties": false,
                                 "$defs": {
                                     "TypeSafeAnswers": {
+                                        "additionalProperties": false,
                                         "description": "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
-                                        "type": "object",
                                         "properties": {
                                             "positive": {
                                                 "description": "The book review is positive.",
@@ -48,7 +38,8 @@
                                                 "enum": [
                                                     "fiction",
                                                     "nonfiction"
-                                                ]
+                                                ],
+                                                "type": "string"
                                             }
                                         },
                                         "required": [
@@ -56,9 +47,19 @@
                                             "rating",
                                             "genre"
                                         ],
-                                        "additionalProperties": false
+                                        "type": "object"
                                     }
-                                }
+                                },
+                                "additionalProperties": false,
+                                "properties": {
+                                    "answers": {
+                                        "$ref": "#/$defs/TypeSafeAnswers"
+                                    }
+                                },
+                                "required": [
+                                    "answers"
+                                ],
+                                "type": "object"
                             },
                             "strict": true
                         }
@@ -111,7 +112,7 @@
                         "600"
                     ],
                     "content-length": [
-                        "1954"
+                        "1970"
                     ]
                 }
             },
@@ -127,15 +128,15 @@
                 },
                 "body": {
                     "string": {
-                        "id": "resp_009708912059272e016aa9a1494e4887d2b6d8487f47b8aabf",
+                        "id": "resp_0d93efcaae564a0d016aad12f5450087d2846de621436b9a42",
                         "object": "response",
-                        "created_at": 1789501769,
+                        "created_at": 1789727477,
                         "status": "completed",
                         "background": false,
                         "billing": {
                             "payer": "developer"
                         },
-                        "completed_at": 1789501770,
+                        "completed_at": 1789727478,
                         "error": null,
                         "frequency_penalty": 0.0,
                         "incomplete_details": null,
@@ -146,7 +147,7 @@
                         "moderation": null,
                         "output": [
                             {
-                                "id": "msg_009708912059272e016aa9a14ac76087d2a87e34ad98741e81",
+                                "id": "msg_0d93efcaae564a0d016aad12f6216087d2b64e99b8efeb38e0",
                                 "type": "message",
                                 "status": "completed",
                                 "content": [
@@ -180,20 +181,10 @@
                                 "description": null,
                                 "name": "evaluation",
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "answers": {
-                                            "$ref": "#/$defs/TypeSafeAnswers"
-                                        }
-                                    },
-                                    "required": [
-                                        "answers"
-                                    ],
-                                    "additionalProperties": false,
                                     "$defs": {
                                         "TypeSafeAnswers": {
+                                            "additionalProperties": false,
                                             "description": "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
-                                            "type": "object",
                                             "properties": {
                                                 "positive": {
                                                     "description": "The book review is positive.",
@@ -208,7 +199,8 @@
                                                     "enum": [
                                                         "fiction",
                                                         "nonfiction"
-                                                    ]
+                                                    ],
+                                                    "type": "string"
                                                 }
                                             },
                                             "required": [
@@ -216,9 +208,19 @@
                                                 "rating",
                                                 "genre"
                                             ],
-                                            "additionalProperties": false
+                                            "type": "object"
                                         }
-                                    }
+                                    },
+                                    "additionalProperties": false,
+                                    "properties": {
+                                        "answers": {
+                                            "$ref": "#/$defs/TypeSafeAnswers"
+                                        }
+                                    },
+                                    "required": [
+                                        "answers"
+                                    ],
+                                    "type": "object"
                                 },
                                 "strict": true
                             },
@@ -248,7 +250,7 @@
                         "top_p": 1.0,
                         "truncation": "disabled",
                         "usage": {
-                            "input_tokens": 357,
+                            "input_tokens": 361,
                             "input_tokens_details": {
                                 "cache_write_tokens": 0,
                                 "cached_tokens": 0
@@ -257,7 +259,7 @@
                             "output_tokens_details": {
                                 "reasoning_tokens": 0
                             },
-                            "total_tokens": 373
+                            "total_tokens": 377
                         },
                         "user": null,
                         "metadata": {}

@@ -11,7 +11,8 @@ from types import TracebackType
 from typing import Any, Generic, TypeVar
 
 import httpx2
-import msgspec
+from pydantic import BaseModel, ValidationError
+from pydantic_core import to_json
 from typesafe_sdk import (
     Answer,
     ChoiceAnswer,
@@ -87,7 +88,8 @@ _OUTPUT_SCHEMA_INSTRUCTION_TEMPLATE = (
 
 
 def _serialize_state_as_user_prompt(state: JSONValue) -> str:
-    serialized_state = msgspec.json.encode(state, order="sorted").decode()
+    serialized_state = to_json(state).decode()
+    # Keep document content from imitating the surrounding prompt delimiters.
     serialized_state = serialized_state.replace("<", "\\u003c").replace(">", "\\u003e")
     return f"<document>\n{serialized_state}\n</document>"
 
@@ -105,7 +107,7 @@ def _extract_json(text: str) -> str:
     return text
 
 
-def _correction_prompt(error: msgspec.DecodeError) -> str:
+def _correction_prompt(error: ValidationError) -> str:
     return (
         f"The previous response did not match the required schema: {error}\n"
         "Return a single JSON object that matches the schema exactly, with no other "
@@ -142,10 +144,7 @@ def _convert_llm_value_to_typesafe_answer(
             score=score,
             confidence=score_confidence(list(probabilities.values())),
             probabilities={int(key): value for key, value in probabilities.items()},
-            # ``criteria`` are typed as the SDK's broad ``JSONContent`` (Mapping/Sequence)
-            # while ``legend`` wants concrete dict/list; they are the same values at
-            # runtime. The SDK annotates this same friction with pyrefly ignores.
-            legend=dict(enumerate(question.criteria)),  # pyrefly: ignore[bad-argument-type]
+            legend=dict(enumerate(question.model_dump(mode="json")["criteria"])),
         )
         return answer, probability_normalization
 
@@ -176,7 +175,7 @@ class _EvaluationRun:
 
     model_name: str
     questions: dict[str, Question]
-    output_model: type[msgspec.Struct]
+    output_model: type[BaseModel]
     schema: dict[str, Any]
     structured: bool
     base_messages: list[Message]
@@ -199,7 +198,7 @@ class _EvaluationRun:
         result: ProviderResult,
         messages: list[Message],
         corrective_attempt: int,
-    ) -> msgspec.Struct | None:
+    ) -> BaseModel | None:
         """Decode a provider result, or extend `messages` for another attempt.
 
         Args:
@@ -215,9 +214,8 @@ class _EvaluationRun:
                 the last allowed corrective retry.
         """
         try:
-            return msgspec.json.decode(_extract_json(result.text), type=self.output_model)
-        # DecodeError also covers ValidationError, so syntax and schema failures share the retry budget.
-        except msgspec.DecodeError as error:
+            return self.output_model.model_validate_json(_extract_json(result.text))
+        except ValidationError as error:
             if corrective_attempt == self.n_retry_malformed_structure:
                 raise TypeSafeAPIResponseValidationError(200, str(error), httpx2.Headers(), "answers") from error
             self.retry_reasons.append(RetryReasons(category="malformed_structure", msg=str(error)))
@@ -240,7 +238,7 @@ class _EvaluationRun:
                 attempt["llm_response"] = asdict(result)
             return result
 
-    def run_sync(self, provider: SyncProvider, retry: RetryPolicy) -> tuple[msgspec.Struct, ProviderResult, int]:
+    def run_sync(self, provider: SyncProvider, retry: RetryPolicy) -> tuple[BaseModel, ProviderResult, int]:
         messages = list(self.base_messages)
         n_retries = 0
         for corrective_attempt in range(self.n_retry_malformed_structure + 1):
@@ -256,7 +254,7 @@ class _EvaluationRun:
                 return output, result, n_retries
         raise AssertionError("malformed-structure loop did not return or raise")
 
-    async def run_async(self, provider: AsyncProvider, retry: RetryPolicy) -> tuple[msgspec.Struct, ProviderResult, int]:
+    async def run_async(self, provider: AsyncProvider, retry: RetryPolicy) -> tuple[BaseModel, ProviderResult, int]:
         messages = list(self.base_messages)
         n_retries = 0
         for corrective_attempt in range(self.n_retry_malformed_structure + 1):
@@ -281,12 +279,12 @@ class _EvaluationRun:
 
     def response(
         self,
-        output: msgspec.Struct,
+        output: BaseModel,
         last_result: ProviderResult,
         n_retries: int,
     ) -> SystemOneResponse:
         """Build the TypeSafe-shaped response from a successful attempt."""
-        raw_answers = msgspec.to_builtins(output)["answers"]
+        raw_answers = output.model_dump()["answers"]
         answers: dict[str, Answer] = {}
         probability_normalizations: dict[str, ProbabilityNormalization | None] = {}
         for question_id, question in self.questions.items():
@@ -431,7 +429,7 @@ class _BaseSystemOneAdapterClient(Generic[ProviderT]):
         else:
             system_prompt = _DISCRETE_SYSTEM_PROMPT
         if not self.structured_outputs:
-            system_prompt += "\n\n" + _OUTPUT_SCHEMA_INSTRUCTION_TEMPLATE.format(schema=msgspec.json.encode(schema, order="sorted").decode())
+            system_prompt += "\n\n" + _OUTPUT_SCHEMA_INSTRUCTION_TEMPLATE.format(schema=to_json(schema).decode())
         base_messages = [
             Message(role="system", content=system_prompt),
             Message(role="user", content=_serialize_state_as_user_prompt(state)),
@@ -482,7 +480,7 @@ class SystemOneAdapterClient(_BaseSystemOneAdapterClient[SyncProvider]):
             RuntimeError: Shutdown has started.
             ValueError: The model or provider is missing, the state is `None`,
                 or the question collection is empty or has too few criteria.
-            msgspec.ValidationError: A question does not match the wire schema.
+            pydantic.ValidationError: A question does not match the SDK schema.
             TypeSafeError: The provider request fails or malformed output remains
                 after the corrective retry allowance is exhausted.
         """
@@ -577,7 +575,7 @@ class AsyncSystemOneAdapterClient(_BaseSystemOneAdapterClient[AsyncProvider]):
             RuntimeError: Shutdown has started.
             ValueError: The model or provider is missing, the state is `None`,
                 or the question collection is empty or has too few criteria.
-            msgspec.ValidationError: A question does not match the wire schema.
+            pydantic.ValidationError: A question does not match the SDK schema.
             TypeSafeError: The provider request fails or malformed output remains
                 after the corrective retry allowance is exhausted.
         """

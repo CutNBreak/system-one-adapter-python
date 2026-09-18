@@ -5,6 +5,16 @@ icon: lucide/history
 
 # Changelog
 
+## v0.2.0 (2026-09-18)
+
+### Breaking Changes
+
+- ser/de library has been changed from `msgspec` to `pydantic` as `typesafe-sdk` did in `v0.7.0`
+
+### Features
+
+- support `typesafe-sdk>=0.7.0`
+
 ## v0.1.5 (2026-09-18)
 
 ### Bug fixes

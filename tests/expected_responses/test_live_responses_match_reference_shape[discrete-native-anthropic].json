@@ -1,9 +1,9 @@
 {
   "model": "claude-haiku-4-5",
   "usage": {
-    "input_tokens": 619,
+    "input_tokens": 628,
     "output_tokens": 20,
-    "input_tokens_total": 619,
+    "input_tokens_total": 628,
     "output_tokens_total": 20,
     "n_retries": 0,
     "n_retries_malformed_structure": 0
@@ -60,20 +60,10 @@
         ],
         "model_request_parameters": {
           "schema": {
-            "type": "object",
-            "properties": {
-              "answers": {
-                "$ref": "#/$defs/TypeSafeAnswers"
-              }
-            },
-            "required": [
-              "answers"
-            ],
-            "additionalProperties": false,
             "$defs": {
               "TypeSafeAnswers": {
+                "additionalProperties": false,
                 "description": "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
-                "type": "object",
                 "properties": {
                   "positive": {
                     "description": "The book review is positive.",
@@ -88,7 +78,8 @@
                     "enum": [
                       "fiction",
                       "nonfiction"
-                    ]
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -96,14 +87,24 @@
                   "rating",
                   "genre"
                 ],
-                "additionalProperties": false
+                "type": "object"
               }
-            }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "answers": {
+                "$ref": "#/$defs/TypeSafeAnswers"
+              }
+            },
+            "required": [
+              "answers"
+            ],
+            "type": "object"
           },
           "structured": true
         },
         "llm_response": {
-          "id": "msg_011Cf5obC2iWT5SyPeY3LWsE",
+          "id": "msg_011CfAkWRx9pkSHeqyjrurvG",
           "container": null,
           "content": [
             {
@@ -126,7 +127,7 @@
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
             "inference_geo": "not_available",
-            "input_tokens": 619,
+            "input_tokens": 628,
             "output_tokens": 20,
             "output_tokens_details": null,
             "server_tool_use": null,
@@ -153,20 +154,10 @@
             "format": {
               "type": "json_schema",
               "schema": {
-                "type": "object",
-                "properties": {
-                  "answers": {
-                    "$ref": "#/$defs/TypeSafeAnswers"
-                  }
-                },
-                "required": [
-                  "answers"
-                ],
-                "additionalProperties": false,
                 "$defs": {
                   "TypeSafeAnswers": {
+                    "additionalProperties": false,
                     "description": "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
-                    "type": "object",
                     "properties": {
                       "positive": {
                         "description": "The book review is positive.",
@@ -181,7 +172,8 @@
                         "enum": [
                           "fiction",
                           "nonfiction"
-                        ]
+                        ],
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -189,9 +181,19 @@
                       "rating",
                       "genre"
                     ],
-                    "additionalProperties": false
+                    "type": "object"
                   }
-                }
+                },
+                "additionalProperties": false,
+                "properties": {
+                  "answers": {
+                    "$ref": "#/$defs/TypeSafeAnswers"
+                  }
+                },
+                "required": [
+                  "answers"
+                ],
+                "type": "object"
               }
             }
           }

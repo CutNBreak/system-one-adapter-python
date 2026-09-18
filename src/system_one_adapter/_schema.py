@@ -1,47 +1,31 @@
-"""Dynamic msgspec output models and their JSON schema.
+"""Pydantic output models built from each request's question IDs and allowed answers.
 
-Why the model is generated at runtime rather than declared statically:
-
-The output contract is *data-dependent*. Its shape is determined by the specific
-questions in each call, which are not known until request time:
-
-- The top-level property names are the caller's question IDs.
-- A Choice's answer must have exactly one property per allowed label (extras forbidden),
-  each a probability in `[0, 1]` carrying that label's criterion as its description.
-- A Score's answer is either an integer in `[0, n)` or an `n`-property probability
-  map, where `n` is that question's number of rubric levels.
-
-No fixed struct can express "exactly these labels, with these descriptions" for labels
-that change on every call, so the struct is built per request with `msgspec.defstruct`
-(the supported runtime-struct factory, msgspec's analogue of `pydantic.create_model`).
-
-One generated struct then does double duty, which is the reason to generate a struct at
-all rather than hand-build a schema dict: `create_raw_output_schema` reads the
-JSON schema off it to constrain and prompt the provider, and the client decodes the
-reply with `msgspec.json.decode(text, type=model)` to validate it and drive the
-malformed-output corrective retry with a precise error.
+The same models generate the provider's JSON schema and validate its response.
+Aliases preserve arbitrary question IDs and choice labels without colliding with
+Pydantic's field names. Provider schemas omit unsupported metadata and constraints;
+the models still enforce those constraints locally.
 """
 
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
-import msgspec
-from msgspec import Meta, defstruct, field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
+from pydantic_core import to_json
 from typesafe_sdk import (
     Choice,
     Noul,
     Questions,
     Score,
 )
-from typesafe_sdk._schemas.models import Question as WireQuestion
 
 from system_one_adapter._utils.probability_normalization import AnswerMode
 
 Question = Noul | Choice | Score
 
-Probability = Annotated[float, Meta(ge=0, le=1)]
+Probability = Annotated[float, Field(ge=0, le=1)]
 
-_QUESTION_CLASS_BY_TAG = {"noul": Noul, "choice": Choice, "score": Score}
+_QUESTIONS_ADAPTER = TypeAdapter(dict[str, Annotated[Question, Field(discriminator="type")]])
+_OUTPUT_CONFIG = ConfigDict(extra="forbid", strict=True, serialize_by_alias=True)
 
 # Score and Choice questions are only meaningful with at least two outcomes to choose
 # between.
@@ -65,31 +49,30 @@ def convert_question_collection_to_validated_api_question_models(
     Raises:
         ValueError: The collection is empty or a score or choice has fewer than
             two criteria.
-        msgspec.ValidationError: A question does not match the wire schema.
+        pydantic.ValidationError: A question does not match the SDK schema.
     """
     if not questions:
         raise ValueError("At least one question is required.")
-    # Validate the whole collection in one pass through the tagged wire union, which
-    # accepts both API model instances and their dictionary form. (The public union
-    # carries a recursive ``JSONValue`` alias msgspec cannot convert directly.)
-    validated = msgspec.convert(msgspec.to_builtins(questions), type=dict[str, WireQuestion])
-    prepared_questions: dict[str, Question] = {}
-    for key, wire_question in validated.items():
-        fields = msgspec.to_builtins(wire_question)
-        prepared_question = _QUESTION_CLASS_BY_TAG[fields.pop("type")](**fields)
-        if isinstance(prepared_question, (Score, Choice)) and len(prepared_question.criteria) < _MIN_CRITERIA:
+    # Dump SDK models so mutable question fields are revalidated and JSON containers
+    # are materialized before they become prompts or score legends.
+    question_data = {
+        key: question.model_dump(mode="json") if isinstance(question, (Noul, Choice, Score)) else question
+        for key, question in questions.items()
+    }
+    validated = _QUESTIONS_ADAPTER.validate_python(question_data, strict=True)
+    for question in validated.values():
+        if isinstance(question, (Score, Choice)) and len(question.criteria) < _MIN_CRITERIA:
             raise ValueError("Score and choice questions require at least two criteria.")
-        prepared_questions[key] = prepared_question
-    return prepared_questions
+    return validated
 
 
 def create_llm_output_model(
     questions: Mapping[str, Question],
     llm_answer_mode: AnswerMode,
-) -> type[msgspec.Struct]:
-    """Build the per-request output struct: `{"answers": {<question id>: <answer>}}`.
+) -> type[BaseModel]:
+    """Build the per-request output model: `{"answers": {<question id>: <answer>}}`.
 
-    Each question contributes one field to the inner `answers` struct, aliased to its
+    Each question contributes one field to the inner `answers` model, aliased to its
     question ID, whose type is generated by `_create_llm_answer_type_for_question`
     to pin the answer to that question's allowed values. See the module docstring for
     why this is generated per request instead of declared statically.
@@ -99,9 +82,9 @@ def create_llm_output_model(
         llm_answer_mode: Probability or discrete answer mode.
 
     Returns:
-        A dynamic msgspec output model containing one answer per question.
+        A dynamic Pydantic model containing one answer per question.
     """
-    answer_fields = []
+    answer_fields: dict[str, Any] = {}
     for index, (question_id, question) in enumerate(questions.items()):
         answer_type = _create_llm_answer_type_for_question(
             index,
@@ -113,38 +96,24 @@ def create_llm_output_model(
         # Anthropic's structured output silently discards sibling keywords, which would
         # remove the question and criteria. Keep the reference site bare; the model
         # definition and its concrete properties carry that context instead.
-        if not is_probability_map:
-            answer_type = Annotated[
-                answer_type,
-                Meta(
-                    description=_build_llm_output_field_description(
-                        question,
-                        llm_answer_mode,
-                    )
-                ),
-            ]
-        answer_fields.append((f"answer_{index}", answer_type, field(name=question_id)))
+        description = None if is_probability_map else _build_llm_output_field_description(question, llm_answer_mode)
+        answer_fields[f"answer_{index}"] = (answer_type, Field(alias=question_id, description=description))
 
-    answers_model = defstruct(
+    answers_model = create_model(
         "TypeSafeAnswers",
-        answer_fields,
-        forbid_unknown_fields=True,
+        __config__=_OUTPUT_CONFIG,
+        # Keep the description on the definition: providers may discard `$ref` siblings.
+        __doc__="Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
+        **answer_fields,
     )
-    # "Keyed by question ID" invited models to invent an ID and nest every answer under
-    # it. Name the properties as fixed instead.
-    # Put the description on the definition: strict OpenAI output rejects `$ref`
-    # siblings, and Anthropic discards them.
-    answers_model.__doc__ = (
-        "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key."
-    )
-    return defstruct(
+    return create_model(
         "TypeSafeEvaluation",
-        [("answers", answers_model)],
-        forbid_unknown_fields=True,
+        __config__=_OUTPUT_CONFIG,
+        answers=(answers_model, ...),
     )
 
 
-def create_raw_output_schema(output_model: type[msgspec.Struct]) -> dict[str, Any]:
+def create_raw_output_schema(output_model: type[BaseModel]) -> dict[str, Any]:
     """Create the self-contained JSON schema for the output model.
 
     Args:
@@ -153,14 +122,10 @@ def create_raw_output_schema(output_model: type[msgspec.Struct]) -> dict[str, An
     Returns:
         JSON schema with the root definition inlined and nested models in `$defs`.
     """
-    schema = msgspec.json.schema(output_model)
-    definitions = schema["$defs"]
-    root = schema["$ref"].rsplit("/", maxsplit=1)[-1]
-    root_definition = definitions.pop(root)
-    return _sanitize_provider_schema({**root_definition, "$defs": definitions})
+    return _sanitize_provider_schema(output_model.model_json_schema())
 
 
-# Keywords the native structured-output modes do not accept and that the msgspec struct
+# Keywords the native structured-output modes do not accept and that the Pydantic model
 # still enforces locally on decode: ``title`` is echoed back by OpenAI as an extra
 # property (rejected by the ``extra=forbid`` schema), and Anthropic rejects the numeric
 # bound keywords outright. The model is still told the ``[0, 1]`` range through the
@@ -196,9 +161,9 @@ def _create_llm_answer_type_for_question(
     generated per question:
 
     - Noul: `bool` (discrete) or a `[0, 1]` probability.
-    - Score: an integer in `[0, n)` (discrete) or a struct with one `[0, 1]`
+    - Score: an integer in `[0, n)` (discrete) or a model with one `[0, 1]`
       probability property per rubric level.
-    - Choice: a `Literal` of the exact labels (discrete) or a struct with one
+    - Choice: a `Literal` of the exact labels (discrete) or a model with one
       `[0, 1]` probability property per label.
 
     Each probability-map property is aliased to its label and carries the label's
@@ -209,7 +174,7 @@ def _create_llm_answer_type_for_question(
 
     if isinstance(question, Score):
         if llm_answer_mode == "discrete":
-            return Annotated[int, Meta(ge=0, lt=len(question.criteria))]
+            return Annotated[int, Field(ge=0, lt=len(question.criteria))]
         answers_and_criteria = [(str(score), criterion) for score, criterion in enumerate(question.criteria)]
     else:
         answers = list(question.criteria)
@@ -219,24 +184,19 @@ def _create_llm_answer_type_for_question(
         answers_and_criteria = list(question.criteria.items())
 
     # Put criteria on their concrete properties so they survive `$ref` transforms.
-    probability_fields = [
-        (
-            f"probability_{answer_index}",
-            Annotated[
-                Probability,
-                Meta(description=_serialize_instruction_value_for_prompt(criterion)),
-            ],
-            field(name=answer),
+    probability_fields: dict[str, Any] = {
+        f"probability_{answer_index}": (
+            Probability,
+            Field(alias=answer, description=_serialize_instruction_value_for_prompt(criterion)),
         )
         for answer_index, (answer, criterion) in enumerate(answers_and_criteria)
-    ]
-    probability_map = defstruct(
+    }
+    return create_model(
         f"ProbabilityMap{index}",
-        probability_fields,  # pyrefly: ignore[bad-argument-type]
-        forbid_unknown_fields=True,
+        __config__=_OUTPUT_CONFIG,
+        __doc__=_build_llm_output_question_description(question, llm_answer_mode),
+        **probability_fields,
     )
-    probability_map.__doc__ = _build_llm_output_question_description(question, llm_answer_mode)
-    return probability_map
 
 
 def _build_llm_output_field_description(
@@ -292,4 +252,4 @@ def _serialize_instruction_value_for_prompt(value: Any) -> str:
         return "No additional instructions."
     if isinstance(value, str):
         return value
-    return msgspec.json.encode(value, order="sorted").decode()
+    return to_json(value).decode()

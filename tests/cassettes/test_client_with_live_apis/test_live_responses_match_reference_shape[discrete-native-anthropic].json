@@ -18,20 +18,10 @@
                         "format": {
                             "type": "json_schema",
                             "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "answers": {
-                                        "$ref": "#/$defs/TypeSafeAnswers"
-                                    }
-                                },
-                                "required": [
-                                    "answers"
-                                ],
-                                "additionalProperties": false,
                                 "$defs": {
                                     "TypeSafeAnswers": {
+                                        "additionalProperties": false,
                                         "description": "Exactly one answer per property below. Use these property names verbatim and do not add, rename, or nest them under any other key.",
-                                        "type": "object",
                                         "properties": {
                                             "positive": {
                                                 "description": "The book review is positive.",
@@ -46,7 +36,8 @@
                                                 "enum": [
                                                     "fiction",
                                                     "nonfiction"
-                                                ]
+                                                ],
+                                                "type": "string"
                                             }
                                         },
                                         "required": [
@@ -54,9 +45,19 @@
                                             "rating",
                                             "genre"
                                         ],
-                                        "additionalProperties": false
+                                        "type": "object"
                                     }
-                                }
+                                },
+                                "additionalProperties": false,
+                                "properties": {
+                                    "answers": {
+                                        "$ref": "#/$defs/TypeSafeAnswers"
+                                    }
+                                },
+                                "required": [
+                                    "answers"
+                                ],
+                                "type": "object"
                             }
                         }
                     },
@@ -115,7 +116,7 @@
                         "600"
                     ],
                     "content-length": [
-                        "1935"
+                        "1951"
                     ]
                 }
             },
@@ -132,7 +133,7 @@
                 "body": {
                     "string": {
                         "model": "claude-haiku-4-5-20251001",
-                        "id": "msg_011Cf5obC2iWT5SyPeY3LWsE",
+                        "id": "msg_011CfAkWRx9pkSHeqyjrurvG",
                         "type": "message",
                         "role": "assistant",
                         "content": [
@@ -146,7 +147,7 @@
                         "stop_sequence": null,
                         "stop_details": null,
                         "usage": {
-                            "input_tokens": 619,
+                            "input_tokens": 628,
                             "cache_creation_input_tokens": 0,
                             "cache_read_input_tokens": 0,
                             "cache_creation": {
