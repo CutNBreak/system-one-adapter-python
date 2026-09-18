@@ -5,6 +5,12 @@ icon: lucide/history
 
 # Changelog
 
+## v0.1.5 (2026-09-18)
+
+### Bug fixes
+
+- constrained `typesafe-sdk` version to `>=0.6.0,<0.7.0`
+
 ## v0.1.4 (2026-09-16)
 
 ### Bug fixes
