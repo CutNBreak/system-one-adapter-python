@@ -18,7 +18,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from typesafe_sdk import TypeSafeError
 
-ProviderName = Literal["openai", "anthropic"]
+ProviderName = Literal["openai", "anthropic", "gemini"]
 
 # Per-call context lets providers enrich the trace without changing the provider
 # protocol or sharing mutable state between concurrent evaluations.
@@ -51,11 +51,11 @@ class Message:
 
 @dataclass(frozen=True)
 class ProviderResult:
-    """The raw JSON payload a model returned and the tokens it cost."""
+    """The raw JSON payload and token counts, or `None` for unreported counts."""
 
     text: str
-    input_tokens: int
-    output_tokens: int
+    input_tokens: int | None
+    output_tokens: int | None
 
 
 @runtime_checkable

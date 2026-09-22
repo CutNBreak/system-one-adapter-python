@@ -12,10 +12,27 @@ import pytest
 from anthropic.types import Message as AnthropicMessage
 from typesafe_sdk import TypeSafeError
 
-from system_one_adapter import AsyncSystemOneAdapterClient, Noul, RetryPolicy, SystemOneAdapterClient, SystemOneResponse
-from system_one_adapter.providers import Message
-from system_one_adapter.providers.anthropic import AnthropicProvider, AsyncAnthropicProvider, _request_kwargs
+from system_one_adapter import (
+    AsyncSystemOneAdapterClient,
+    Noul,
+    RetryPolicy,
+    SystemOneAdapterClient,
+    SystemOneResponse,
+)
+from system_one_adapter.providers import (
+    Message,
+    build_async_provider,
+    build_sync_provider,
+)
+from system_one_adapter.providers.anthropic import (
+    AnthropicProvider,
+    AsyncAnthropicProvider,
+    _request_kwargs,
+)
 from system_one_adapter.providers.anthropic import _result as anthropic_result
+from system_one_adapter.providers.gemini import AsyncGeminiProvider, GeminiProvider
+from system_one_adapter.providers.gemini import _request_kwargs as gemini_request_kwargs
+from system_one_adapter.providers.gemini import _result as gemini_result
 from system_one_adapter.providers.openai import _response_format
 from system_one_adapter.providers.openai import _result as openai_result
 
@@ -58,6 +75,68 @@ def test_anthropic_request_puts_schema_in_output_config_when_structured() -> Non
 def test_anthropic_request_omits_output_config_when_prompted() -> None:
     kwargs = _request_kwargs("claude-haiku-4-5", MESSAGES, SCHEMA, structured=False, max_tokens=4096)
     assert "output_config" not in kwargs
+
+
+def test_gemini_request_puts_schema_in_response_format_when_structured() -> None:
+    kwargs = gemini_request_kwargs("gemini-3.8-flash", MESSAGES, SCHEMA, structured=True)
+    assert kwargs["system_instruction"] == "system prompt"
+    assert kwargs["input"] == [{"type": "user_input", "content": [{"type": "text", "text": "the document"}]}]
+    assert kwargs["store"] is False
+    assert kwargs["response_format"] == {
+        "type": "text",
+        "mime_type": "application/json",
+        "schema": SCHEMA,
+    }
+
+
+def test_gemini_request_omits_response_format_when_prompted() -> None:
+    kwargs = gemini_request_kwargs("gemini-3.8-flash", MESSAGES, SCHEMA, structured=False)
+    assert "response_format" not in kwargs
+    assert kwargs["store"] is False
+
+
+def test_gemini_request_sends_correction_turns_as_steps() -> None:
+    messages = [
+        *MESSAGES,
+        Message(role="assistant", content='{"answers":'),
+        Message(role="user", content="fix it"),
+    ]
+    kwargs = gemini_request_kwargs("gemini-3.8-flash", messages, SCHEMA, structured=True)
+    assert kwargs["input"] == [
+        {"type": "user_input", "content": [{"type": "text", "text": "the document"}]},
+        {"type": "model_output", "content": [{"type": "text", "text": '{"answers":'}]},
+        {"type": "user_input", "content": [{"type": "text", "text": "fix it"}]},
+    ]
+
+
+def test_gemini_result_reads_output_text_and_usage() -> None:
+    response = SimpleNamespace(
+        status="completed",
+        output_text='{"answers": {}}',
+        usage=SimpleNamespace(total_input_tokens=20, total_output_tokens=5),
+        errors=None,
+    )
+    result = gemini_result(response)
+    assert result.text == '{"answers": {}}'
+    assert (result.input_tokens, result.output_tokens) == (20, 5)
+
+
+@pytest.mark.parametrize("status", ["incomplete", "failed", "cancelled", "budget_exceeded"])
+def test_gemini_incomplete_status_is_not_treated_as_an_answer(status: str) -> None:
+    response = SimpleNamespace(
+        status=status,
+        output_text='{"answers":{"positive":true}}',
+        usage=SimpleNamespace(total_input_tokens=20, total_output_tokens=5),
+        errors=None,
+    )
+    with pytest.raises(TypeSafeError, match=r"Gemini response did not complete"):
+        gemini_result(response)
+
+
+def test_gemini_omitted_usage_is_not_treated_as_an_answer() -> None:
+    response = SimpleNamespace(status="completed", output_text='{"answers":{}}', usage=None, errors=None)
+    with pytest.raises(TypeSafeError, match="omitted usage"):
+        gemini_result(response)
 
 
 def test_anthropic_result_joins_text_blocks_and_reads_usage() -> None:
@@ -113,7 +192,11 @@ def test_anthropic_output_limit(
             async def run() -> SystemOneResponse:
                 async with provider._client:
                     client = AsyncSystemOneAdapterClient(
-                        structured_outputs=structured, llm_answer_mode="discrete", n_retry_malformed_structure=2, retry=retry, model=provider
+                        structured_outputs=structured,
+                        llm_answer_mode="discrete",
+                        n_retry_malformed_structure=2,
+                        retry=retry,
+                        model=provider,
                     )
                     return await client.system_one("A delightful book.", questions)
 
@@ -121,7 +204,11 @@ def test_anthropic_output_limit(
         monkeypatch.setattr(provider._client.messages, "create", create)
         with provider._client:
             client = SystemOneAdapterClient(
-                structured_outputs=structured, llm_answer_mode="discrete", n_retry_malformed_structure=2, retry=retry, model=provider
+                structured_outputs=structured,
+                llm_answer_mode="discrete",
+                n_retry_malformed_structure=2,
+                retry=retry,
+                model=provider,
             )
             return client.system_one("A delightful book.", questions)
 
@@ -146,7 +233,24 @@ def test_anthropic_output_limit(
 @pytest.mark.parametrize("provider_class", [AnthropicProvider, AsyncAnthropicProvider])
 @pytest.mark.parametrize("max_tokens", [0, -1])
 def test_anthropic_rejects_nonpositive_output_limit(
-    provider_class: type[AnthropicProvider] | type[AsyncAnthropicProvider], max_tokens: int
+    provider_class: type[AnthropicProvider] | type[AsyncAnthropicProvider],
+    max_tokens: int,
 ) -> None:
     with pytest.raises(ValueError, match="max_tokens must be > 0"):
         provider_class("claude-haiku-4-5", max_tokens=max_tokens)
+
+
+def test_build_providers_select_gemini() -> None:
+    sync_provider = build_sync_provider("gemini", "gemini-3.8-flash")
+    async_provider = build_async_provider("gemini", "gemini-3.8-flash")
+    try:
+        assert isinstance(sync_provider, GeminiProvider)
+        assert isinstance(async_provider, AsyncGeminiProvider)
+    finally:
+        sync_provider.close()
+        asyncio.run(async_provider.aclose())
+
+
+def test_unknown_provider_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown provider"):
+        build_sync_provider("nope", "model")  # type: ignore[arg-type]

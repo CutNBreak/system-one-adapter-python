@@ -62,6 +62,8 @@ class _ScriptedProvider:
         step = self._steps[min(len(self.calls) - 1, len(self._steps) - 1)]
         if isinstance(step, Exception):
             raise step
+        if isinstance(step, ProviderResult):
+            return step
         input_tokens, output_tokens = self._usage
         return ProviderResult(
             text=step if isinstance(step, str) else to_json(step).decode(),
@@ -288,6 +290,48 @@ def test_malformed_retry_exhaustion_preserves_debug(
     expected_text = malformed_response if isinstance(malformed_response, str) else to_json(malformed_response).decode()
     assert all(attempt["llm_response"]["text"] == expected_text for attempt in attempts)
     to_json(raised.value.debug)  # pyrefly: ignore[missing-attribute]
+
+
+@pytest.mark.parametrize("client_class", [SystemOneAdapterClient, AsyncSystemOneAdapterClient])
+@pytest.mark.parametrize(
+    "counts,totals",
+    [
+        ([(10, 4), (12, 7)], (22, 11)),
+        ([(None, None), (12, 7)], (None, None)),
+        ([(12, 7), (None, None)], (None, None)),
+        ([(None, None), (None, None)], (None, None)),
+        ([(10, 4), (None, 2), (7, 3)], (None, 9)),
+        ([(10, 4), (5, None), (7, 3)], (22, None)),
+        ([(None, 4), (12, None)], (None, None)),
+    ],
+)
+def test_usage_totals_preserve_unknown_counts_across_corrections(
+    client_class: type[SystemOneAdapterClient] | type[AsyncSystemOneAdapterClient],
+    counts: list[tuple[int | None, int | None]],
+    totals: tuple[int | None, int | None],
+) -> None:
+    provider_class = FakeAsyncProvider if client_class is AsyncSystemOneAdapterClient else FakeSyncProvider
+    provider = provider_class(
+        *[
+            ProviderResult(
+                text='{"answers":{"answer":0.75}}' if index == len(counts) - 1 else '{"answers":',
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            for index, (input_tokens, output_tokens) in enumerate(counts)
+        ]
+    )
+    client = client_class(structured_outputs=True, llm_answer_mode="probabilities", n_retry_malformed_structure=len(counts) - 1)
+
+    response = _run(client, provider, {"answer": QUESTIONS["positive"]}, "state")
+
+    assert response.nouls["answer"].noul == 0.75
+    assert (response.usage.input_tokens, response.usage.output_tokens) == counts[-1]
+    assert (response.usage.input_tokens_total, response.usage.output_tokens_total) == totals
+    assert response.usage.n_retries_malformed_structure == len(counts) - 1
+    assert len(provider.calls) == len(counts)
+    serialized_usage = from_json(response.model_dump_json())["usage"]
+    assert (serialized_usage["input_tokens_total"], serialized_usage["output_tokens_total"]) == totals
 
 
 @pytest.mark.parametrize("client_class", [SystemOneAdapterClient, AsyncSystemOneAdapterClient])

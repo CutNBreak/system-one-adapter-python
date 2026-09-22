@@ -15,8 +15,8 @@ from typesafe_sdk import Usage as SDKUsage
 class Usage(SDKUsage):
     """Keep final-attempt usage alongside cumulative retry accounting."""
 
-    input_tokens_total: int
-    output_tokens_total: int
+    input_tokens_total: int | None
+    output_tokens_total: int | None
     n_retries: int
     n_retries_malformed_structure: int
     latency: float

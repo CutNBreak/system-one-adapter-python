@@ -5,6 +5,19 @@ icon: lucide/history
 
 # Changelog
 
+## v0.2.1 (2026-09-22)
+
+### Bug fixes
+
+- reject incomplete chat completions
+- allow OpenAI responses without token usage
+- stop retrying provider refusals as malformed output
+- support both `httpx` and `httpx2` provider SDKs
+
+### Features
+
+- support Gemini provider
+
 ## v0.2.0 (2026-09-18)
 
 ### Breaking Changes

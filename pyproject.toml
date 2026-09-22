@@ -1,6 +1,6 @@
 [project]
 name = "system-one-adapter"
-version = "0.2.0"
+version = "0.2.1"
 description = "Drop-in TypeSafeClient replacement backed by LLM APIs"
 readme = "README.md"
 license = "MIT"
@@ -13,7 +13,7 @@ maintainers = [
     { name = "Daniel Gafni", email = "daniel@typesafe.ai" }
 ]
 requires-python = ">=3.10"
-keywords = ["typesafe", "llm", "openai", "anthropic", "ai"]
+keywords = ["typesafe", "llm", "openai", "anthropic", "gemini", "ai"]
 classifiers = [
     "Typing :: Typed",
     "Development Status :: 5 - Production/Stable",
@@ -52,14 +52,19 @@ openai = [
 anthropic = [
     "anthropic>=0.121.0",
 ]
+gemini = [
+    "google-genai>=2.24.0",
+]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pyrefly>=1.2.0",
     "pytest>=9.0.2",
     "pytest-recording>=0.13.4",
     "ruff>=0.16.6",
     "tach>=0.35.0",
+    "vcrpy>=8.3.0",
 ]
 
 [tool.uv.build-backend]

@@ -43,10 +43,13 @@ def _response_format(schema: dict[str, Any], *, structured: bool) -> Any:
 
 def _result(response: Any) -> ProviderResult:
     record_response(response, finish_reason=response.choices[0].finish_reason)
+    finish_reason = response.choices[0].finish_reason
+    if finish_reason not in ("stop", None):
+        raise TypeSafeError(f"OpenAI chat completion did not complete: {finish_reason}.")
     return ProviderResult(
         text=response.choices[0].message.content or "",
-        input_tokens=response.usage.prompt_tokens,
-        output_tokens=response.usage.completion_tokens,
+        input_tokens=getattr(response.usage, "prompt_tokens", None),
+        output_tokens=getattr(response.usage, "completion_tokens", None),
     )
 
 
@@ -75,10 +78,15 @@ def _responses_result(response: Any) -> ProviderResult:
         elif response.incomplete_details is not None:
             reason = response.incomplete_details.reason
         raise TypeSafeError(f"OpenAI response did not complete: {reason}.")
+    for item in response.output:
+        if item.type == "message":
+            for part in item.content:
+                if part.type == "refusal":
+                    raise TypeSafeError(f"OpenAI response was a refusal: {part.refusal}")
     return ProviderResult(
         text=response.output_text,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
+        input_tokens=getattr(response.usage, "input_tokens", None),
+        output_tokens=getattr(response.usage, "output_tokens", None),
     )
 
 

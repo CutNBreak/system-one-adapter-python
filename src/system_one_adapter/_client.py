@@ -184,14 +184,20 @@ class _EvaluationRun:
     should_normalize_probabilities: bool
     retry_reasons: list[RetryReasons] = field(default_factory=list)
     llm_attempts: list[dict[str, Any]] = field(default_factory=list)
-    input_tokens_total: int = 0
-    output_tokens_total: int = 0
+    input_tokens_total: int | None = 0
+    output_tokens_total: int | None = 0
     n_retries_malformed_structure: int = 0
     started_at: float = field(default_factory=time.perf_counter)
 
     def _record(self, result: ProviderResult) -> None:
-        self.input_tokens_total += result.input_tokens
-        self.output_tokens_total += result.output_tokens
+        if self.input_tokens_total is None or result.input_tokens is None:
+            self.input_tokens_total = None
+        else:
+            self.input_tokens_total += result.input_tokens
+        if self.output_tokens_total is None or result.output_tokens is None:
+            self.output_tokens_total = None
+        else:
+            self.output_tokens_total += result.output_tokens
 
     def _decode_or_correct(
         self,
@@ -346,8 +352,9 @@ class _BaseSystemOneAdapterClient(Generic[ProviderT]):
             n_retry_malformed_structure: Maximum corrective retries for malformed
                 model output. Defaults to zero.
             retry: Policy for transient provider failures. Defaults to no retries.
-            provider: Default provider for model names: `"openai"` or
-                `"anthropic"`. May be supplied on each call instead.
+            provider: Default provider for model names: `"openai"`,
+                `"anthropic"`, or `"gemini"`. May be supplied on each call
+                instead.
             model: Default model name or caller-owned provider instance. May be
                 supplied on each call instead.
 
@@ -393,7 +400,9 @@ class _BaseSystemOneAdapterClient(Generic[ProviderT]):
                 return model
             provider = provider if provider is not None else self.provider
             if provider is None:
-                raise ValueError("A provider is required: set provider='openai' or 'anthropic', or pass a provider instance as the model.")
+                raise ValueError(
+                    "A provider is required: set provider='openai', 'anthropic', or 'gemini', or pass a provider instance as the model."
+                )
             key = (provider, model)
             if key not in self._owned_providers:
                 self._owned_providers[key] = self._build_provider(provider, model)

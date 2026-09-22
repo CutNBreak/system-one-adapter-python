@@ -14,7 +14,7 @@ uv run pytest tests/test_client_with_live_apis.py --record-mode=rewrite
 ```
 
 Recording makes real, billable API calls and needs `OPENAI_API_KEY`,
-`ANTHROPIC_API_KEY`, and `TYPESAFE_API_KEY`.
+`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and `TYPESAFE_API_KEY`.
 """
 
 import asyncio
@@ -86,14 +86,26 @@ CONTEXT_PROBE_QUESTIONS = {
 PROVIDER_PARAMETERS = [
     pytest.param(("openai", "gpt-4o-mini"), id="openai"),
     pytest.param(("anthropic", "claude-haiku-4-5"), id="anthropic"),
+    pytest.param(("gemini", "gemini-3.5-flash-lite"), id="gemini"),
 ]
-STRUCTURED_OUTPUT_PARAMETERS = [pytest.param(False, id="prompted"), pytest.param(True, id="native")]
+STRUCTURED_OUTPUT_PARAMETERS = [
+    pytest.param(False, id="prompted"),
+    pytest.param(True, id="native"),
+]
 ANSWER_MODE_PARAMETERS = ["probabilities", "discrete"]
 
 
 def _response_data(response: Any) -> dict[str, Any]:
     """Serialize a response the same way for the extended and plain SDK types."""
     return response.model_dump(mode="json")
+
+
+def _without_null_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _without_null_fields(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_without_null_fields(item) for item in value]
+    return value
 
 
 def assert_live_response_matches_reference(response: Any, request: pytest.FixtureRequest) -> None:
@@ -121,6 +133,11 @@ def assert_live_response_matches_reference(response: Any, request: pytest.Fixtur
     expected_response_path = Path(__file__).with_name("expected_responses") / f"{request.node.name}.json"
     if request.config.getoption("--record-mode") in (None, "none"):
         expected_response_data = json.loads(expected_response_path.read_text())
+        # SDK releases add optional response fields with None defaults. Compare
+        # provider payload values without depending on those SDK-only additions.
+        for data in (response_data, expected_response_data):
+            for attempt in data.get("debug", {}).get("llm_attempts", []):
+                attempt["llm_response"] = _without_null_fields(attempt["llm_response"])
         assert response_data == expected_response_data
     else:
         expected_response_path.write_text(json.dumps(response_data, indent=2) + "\n")
@@ -131,7 +148,7 @@ def assert_live_response_matches_reference(response: Any, request: pytest.Fixtur
 @pytest.mark.parametrize("structured_outputs", STRUCTURED_OUTPUT_PARAMETERS)
 @pytest.mark.parametrize("answer_mode", ANSWER_MODE_PARAMETERS)
 def test_live_responses_match_reference_shape(
-    provider_model: tuple[Literal["openai", "anthropic"], str],
+    provider_model: tuple[Literal["openai", "anthropic", "gemini"], str],
     structured_outputs: bool,
     answer_mode: Literal["probabilities", "discrete"],
     request: pytest.FixtureRequest,
@@ -172,10 +189,13 @@ def test_live_responses_match_reference_shape(
     # the final provider request so this covers the schema the model actually receives.
     if structured_outputs and answer_mode == "probabilities":
         request_body = json.loads(vcr.requests[0].body)
-        # OpenAI and Anthropic carry the native schema in different envelopes.
-        provider_schema = (
-            request_body["output_config"]["format"]["schema"] if "output_config" in request_body else request_body["text"]["format"]["schema"]
-        )
+        # OpenAI, Anthropic, and Gemini carry the native schema in different envelopes.
+        if "output_config" in request_body:
+            provider_schema = request_body["output_config"]["format"]["schema"]
+        elif "response_format" in request_body:
+            provider_schema = request_body["response_format"]["schema"]
+        else:
+            provider_schema = request_body["text"]["format"]["schema"]
         definitions = provider_schema["$defs"]
         choice_reference = definitions["TypeSafeAnswers"]["properties"]["genre"]["$ref"]
         choice_schema = definitions[choice_reference.rsplit("/", maxsplit=1)[-1]]
@@ -192,7 +212,7 @@ def test_live_responses_match_reference_shape(
 @pytest.mark.parametrize("structured_outputs", STRUCTURED_OUTPUT_PARAMETERS)
 @pytest.mark.parametrize("answer_mode", ANSWER_MODE_PARAMETERS)
 def test_live_models_follow_question_instructions_and_criteria(
-    provider_model: tuple[Literal["openai", "anthropic"], str],
+    provider_model: tuple[Literal["openai", "anthropic", "gemini"], str],
     structured_outputs: bool,
     answer_mode: Literal["probabilities", "discrete"],
 ) -> None:
@@ -217,7 +237,9 @@ def test_live_models_follow_question_instructions_and_criteria(
 
 
 @pytest.mark.vcr
-def test_live_typesafe_response_matches_reference_shape(request: pytest.FixtureRequest) -> None:
+def test_live_typesafe_response_matches_reference_shape(
+    request: pytest.FixtureRequest,
+) -> None:
     with TypeSafeClient(api_key=os.environ["TYPESAFE_API_KEY"]) as client:
         response = client.system_one(STATE, QUESTIONS, model="speed_latest")
 

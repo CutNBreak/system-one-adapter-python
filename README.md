@@ -13,6 +13,7 @@ The provider SDKs are optional extras — install the one(s) you use:
 ```bash
 pip install 'system-one-adapter[openai]'      # OpenAI-compatible providers
 pip install 'system-one-adapter[anthropic]'   # native Anthropic
+pip install 'system-one-adapter[gemini]'      # native Gemini
 ```
 
 ## Usage
@@ -32,14 +33,14 @@ client = SystemOneAdapterClient(
 response = client.system_one(
     state="This book was a delight to read.",
     questions={"positive": Noul(instructions="The book review is positive.")},
-    provider="openai",  # "openai" or "anthropic"
+    provider="openai",  # "openai", "anthropic", or "gemini"
     model="gpt-4o-mini",
 )
 ```
 
 `provider` and `model` may also be set on the constructor as defaults. `provider`
 is required unless `model` is a provider instance (e.g. a custom OpenAI-compatible
-endpoint):
+endpoint or a Gemini client):
 
 ```python
 from system_one_adapter.providers.openai import OpenAIProvider
@@ -58,6 +59,12 @@ output and JSON mode for prompted output. Custom endpoints (including
 explicitly, for example when using an OpenAI proxy. Responses are requested with
 `store=False`; corrective retries send the conversation history with each request.
 
+Gemini uses the Interactions API. Structured mode sets `response_format` to JSON
+Schema; prompted mode leaves the schema in the system prompt. Requests use
+`store=False` and send the full conversation on corrective retries. Credentials
+come from `GEMINI_API_KEY` or `GOOGLE_API_KEY`, or `api_key=` on
+`GeminiProvider` / `AsyncGeminiProvider`.
+
 For larger Anthropic evaluations, configure the output token limit on the provider
 (default: 4,096 tokens):
 
@@ -71,6 +78,10 @@ client.system_one(state, questions, model=AnthropicProvider("claude-haiku-4-5", 
 raises `typesafe_sdk.TypeSafeError` with instructions to increase `max_tokens` or
 request fewer questions; it does not consume malformed-output retries.
 
+Provider-declared refusals and incomplete generations, including Anthropic context
+overflow, also raise `TypeSafeError` without corrective retries. The error names the
+reason and preserves the full provider response in `error.debug["llm_attempts"]`.
+
 ### Response
 
 The response is a `typesafe_sdk.SystemOneResponse` subclass — same `answers` and typed
@@ -80,6 +91,10 @@ views — with two additions:
   `n_retries`, `n_retries_malformed_structure`, and `latency`.
 - `response.debug` holds `llm_attempts`, `retry_reasons`, and probability-normalization
   diagnostics.
+
+OpenAI-compatible endpoints may omit token usage. Unreported counts are `None`;
+the evaluation still succeeds. A cumulative token count is `None` if any attempt
+omitted that count. Reported counts, including zero, are preserved.
 
 `llm_attempts` records every provider call in order, including transient failures and
 malformed responses. Each entry contains a snapshot of `messages`,

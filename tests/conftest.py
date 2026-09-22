@@ -10,14 +10,22 @@ import pytest
 # Provider SDKs demand a key when the client is built, before any HTTP happens, so
 # replay would fail without one. setdefault runs at import (before parametrize builds
 # its clients) and never overwrites a real key, so recording is unaffected.
-for _credential in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "TYPESAFE_API_KEY"):
+for _credential in (
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "TYPESAFE_API_KEY",
+):
     os.environ.setdefault(_credential, "cassette-only")
+
+if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
+    os.environ["GEMINI_API_KEY"] = "cassette-only"
 
 # Credentials must never reach a committed cassette. Recording strips these outright
 # rather than masking them, so a cassette cannot leak a key even if one is set.
 FILTERED_HEADERS = [
     "authorization",
     "x-api-key",
+    "x-goog-api-key",
     "api-key",
     "openai-organization",
     "openai-project",

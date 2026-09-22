@@ -6,12 +6,14 @@ from types import SimpleNamespace
 from typing import Any, Literal
 
 import httpx
+import httpx2
 import pytest
 from typesafe_sdk import TypeSafeError
 
 from system_one_adapter import AsyncSystemOneAdapterClient, Noul, SystemOneAdapterClient, SystemOneResponse
 from system_one_adapter.providers import Message
 from system_one_adapter.providers.openai import AsyncOpenAIProvider, OpenAIProvider, _responses_result
+from tests.http import json_response
 
 
 def _assert_attempts(response: SystemOneResponse, requests: list[dict[str, Any]], endpoint: str, malformed: str) -> None:
@@ -52,7 +54,7 @@ def test_openai_transport_preserves_corrections_and_usage(
     requests: list[dict[str, Any]] = []
     malformed = '{"answers":'
 
-    def respond(request: httpx.Request) -> httpx.Response:
+    def respond(request: httpx.Request | httpx2.Request) -> httpx.Response | httpx2.Response:
         assert request.url.path == endpoint
         requests.append(json.loads(request.content))
         text = malformed if len(requests) == 1 else '{"answers":{"positive":true}}'
@@ -71,16 +73,23 @@ def test_openai_transport_preserves_corrections_and_usage(
                 "choices": [{"message": {"role": "assistant", "content": text}}],
                 "usage": {"prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19},
             }
-        return httpx.Response(200, request=request, json=payload)
+        return json_response(request, payload)
 
-    def send(client: httpx.Client, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+    def send(client: httpx.Client | httpx2.Client, request: httpx.Request | httpx2.Request, **kwargs: Any) -> httpx.Response | httpx2.Response:
         return respond(request)
 
-    async def send_async(client: httpx.AsyncClient, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+    async def send_async(
+        client: httpx.AsyncClient | httpx2.AsyncClient, request: httpx.Request | httpx2.Request, **kwargs: Any
+    ) -> httpx.Response | httpx2.Response:
         return respond(request)
 
-    monkeypatch.setattr(httpx.Client, "send", send)
-    monkeypatch.setattr(httpx.AsyncClient, "send", send_async)
+    for client_class, handler in [
+        (httpx.Client, send),
+        (httpx2.Client, send),
+        (httpx.AsyncClient, send_async),
+        (httpx2.AsyncClient, send_async),
+    ]:
+        monkeypatch.setattr(client_class, "send", handler)
     provider = provider_class("test-model", base_url=base_url, api=api)
     questions = {"positive": Noul(instructions="The review is positive.")}
     if isinstance(provider, AsyncOpenAIProvider):
@@ -155,7 +164,9 @@ def test_concurrent_attempts_are_isolated_and_preserve_failed_responses(monkeypa
         requests: list[dict[str, Any]] = []
         ready = asyncio.Event()
 
-        async def send(client: httpx.AsyncClient, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+        async def send(
+            client: httpx.AsyncClient | httpx2.AsyncClient, request: httpx.Request | httpx2.Request, **kwargs: Any
+        ) -> httpx.Response | httpx2.Response:
             body = json.loads(request.content)
             requests.append(body)
             if len(requests) >= 2:
@@ -163,21 +174,19 @@ def test_concurrent_attempts_are_isolated_and_preserve_failed_responses(monkeypa
             await asyncio.wait_for(ready.wait(), timeout=5)
             document = body["input"][0]["content"]
             status = first_status if "first document" in document else "completed"
-            return httpx.Response(
-                200,
-                request=request,
-                json={
-                    "status": status,
-                    "error": {"code": "server_error", "message": "generation failed"} if status == "failed" else None,
-                    "incomplete_details": {"reason": "max_output_tokens"} if status == "incomplete" else None,
-                    "output": [
-                        {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": '{"answers":{"positive":true}}'}]}
-                    ],
-                    "usage": {"input_tokens": 12, "output_tokens": 7, "total_tokens": 19},
-                },
-            )
+            payload = {
+                "status": status,
+                "error": {"code": "server_error", "message": "generation failed"} if status == "failed" else None,
+                "incomplete_details": {"reason": "max_output_tokens"} if status == "incomplete" else None,
+                "output": [
+                    {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": '{"answers":{"positive":true}}'}]}
+                ],
+                "usage": {"input_tokens": 12, "output_tokens": 7, "total_tokens": 19},
+            }
+            return json_response(request, payload)
 
         monkeypatch.setattr(httpx.AsyncClient, "send", send)
+        monkeypatch.setattr(httpx2.AsyncClient, "send", send)
         provider = AsyncOpenAIProvider("test-model", api="responses")
         async with provider._client:
             client = AsyncSystemOneAdapterClient(structured_outputs=True, llm_answer_mode="discrete", model=provider)

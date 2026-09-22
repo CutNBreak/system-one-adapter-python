@@ -59,6 +59,8 @@ def _result(response: Any) -> ProviderResult:
             "Anthropic response was truncated at the output token limit. "
             "Increase max_tokens on AnthropicProvider or AsyncAnthropicProvider, or request fewer questions."
         )
+    if response.stop_reason not in ("end_turn", "stop_sequence", None):
+        raise TypeSafeError(f"Anthropic response did not complete: {response.stop_reason}.")
     text = "".join(block.text for block in response.content if block.type == "text")
     return ProviderResult(
         text=text,
